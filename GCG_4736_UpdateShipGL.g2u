@@ -1,0 +1,158 @@
+Program.Sub.Preflight.Start
+
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+F.ODBC.connection!conx.openConnection(v.Ambient.PDSN,v.Ambient.PUser,v.Ambient.PPass)
+
+f.Intrinsic.Control.If(v.Caller.Hook,=,16090)
+	f.Intrinsic.Control.If(v.Passed.BIP_REPORTID,=,"000055")
+'	f.Intrinsic.Control.If(v.Passed.BIP_REPORTID,=,"000062")
+		f.Intrinsic.Control.CallSub(UpdateOnBatch)
+	f.Intrinsic.Control.Else
+		f.Intrinsic.Control.CallSub(Unload)
+	f.Intrinsic.Control.EndIf
+f.Intrinsic.Control.ElseIf(v.Caller.Hook,=,15121)
+	f.Intrinsic.Control.CallSub(UpdateOnModify)
+f.Intrinsic.Control.Else
+	f.Intrinsic.Control.CallSub(Unload)
+f.Intrinsic.Control.EndIf
+ 
+Program.Sub.Main.End
+
+
+Program.Sub.Unload.Start
+F.ODBC.Connection!conx.Close
+F.Intrinsic.Control.End 
+
+Program.Sub.Unload.End
+
+Program.Sub.UpdateOnModify.Start
+V.Local.sSql.Declare(String)
+V.Local.sCountry.Declare(String)
+V.Local.sState.Declare(String)
+f.intrinsic.String.Build("select state_ship from V_SHIPMENT_SHIPTO where order_no = '{0}' and order_suffix = '{1}'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql,V.Local.sState)
+f.intrinsic.String.Build("select country_ship from V_SHIPMENT_SHIPTO where order_no = '{0}' and order_suffix = '{1}'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+F.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSql,V.Local.sCountry)
+
+f.Intrinsic.Control.If(v.local.sState.Trim,=,"WA")
+
+	f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5230.101' where order_no = '{0}' and order_suffix = '{1}' and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Control.If(v.local.sState.Trim,<>,"WA","AND",V.Local.sCountry.Trim,=,"USA")
+
+	f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5200.101' where order_no = '{0}' and order_suffix = '{1}' and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.Control.EndIf
+
+f.Intrinsic.Control.If(v.local.sState.Trim,<>,"WA","AND",V.Local.sCountry.Trim,=,"")
+
+	f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5200.101' where order_no = '{0}' and order_suffix = '{1}' and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.Control.EndIf
+
+
+
+f.Intrinsic.Control.If(V.Local.sCountry.Trim,=,"CAN")
+
+	f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5210.101' where order_no = '{0}' and order_suffix = '{1}' and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.Control.EndIf
+
+
+
+
+f.Intrinsic.Control.If(V.Local.sCountry.Trim,<>,"CAN","AND",V.Local.sCountry.Trim,<>,"USA",V.Local.sCountry.Trim,<>,"")
+
+	f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5220.101' where order_no = '{0}' and order_suffix = '{1}' and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.009001,v.Passed.009002,v.Local.sSql)
+	F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.Control.EndIf
+
+
+f.Intrinsic.Control.CallSub(Unload)
+
+
+Program.Sub.UpdateOnModify.End
+
+Program.Sub.UpdateOnBatch.Start
+
+V.Local.sError.Declare(String)
+
+
+
+'This project will update the customer's GL account based on criteria specified by the customer. This will run from a custom menu item.
+'Created by FEQ 2/1/2017 for Yakima Bait Company
+
+V.Local.sSql.Declare(String)
+
+
+
+
+'We cant use the view on some of these. But the SQL from questionnaire was spot on. WE need to use Customer Master Rec = 1 when updating main shipments. 
+'Oe _Multi ship doesn't need a view cause it's written one rec.
+
+'5230.101  -Main Ship to State = WA 
+
+f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5230.101' where invoice in(select distinct INVOICE_NO from v_PRT_LASER_INVOICE where TERMINAL_NO = '{0}' and SHIP_STATE = 'WA') and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.BIP_Terminal,v.Local.sSql)
+
+'V.Local.sSql.Set("UPDATE CUSTOMER_MASTER SET CUSTOMER_MASTER.NORMAL_GL_ACCOUNT = '5230.101' FROM CUSTOMER_MASTER ")
+'F.Intrinsic.String.Build("{0} JOIN V_CUSTOMER_SHIPTO ON CUSTOMER_MASTER.CUSTOMER = V_CUSTOMER_SHIPTO.CUSTOMER  ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} WHERE CUSTOMER_MASTER.REC ='1' AND V_CUSTOMER_SHIPTO.STATE_SHIP ='WA' ", V.Local.sSql, V.Local.sSql)
+
+F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+'5200.101 -Main Ship to Country = USA -Main Ship to State <> WA
+
+f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5200.101' where invoice in(select distinct INVOICE_NO from v_PRT_LASER_INVOICE where TERMINAL_NO = '{0}' and SHIP_STATE <> 'WA' and SHIP_COUNTRY = 'USA') and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.BIP_Terminal,v.Local.sSql)
+'V.Local.sSql.Set("UPDATE CUSTOMER_MASTER SET CUSTOMER_MASTER.NORMAL_GL_ACCOUNT = '5200.101' FROM CUSTOMER_MASTER ")
+'F.Intrinsic.String.Build("{0} JOIN V_CUSTOMER_SHIPTO ON  CUSTOMER_MASTER.CUSTOMER = V_CUSTOMER_SHIPTO.CUSTOMER ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} WHERE CUSTOMER_MASTER.REC ='1' AND V_CUSTOMER_SHIPTO.COUNTRY_SHIP = 'USA' AND V_CUSTOMER_SHIPTO.STATE_SHIP <> 'WA' AND V_CUSTOMER_SHIPTO.REC ='3'", V.Local.sSql, V.Local.sSql)
+
+F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5200.101' where invoice in(select distinct INVOICE_NO from v_PRT_LASER_INVOICE where TERMINAL_NO = '{0}' and SHIP_STATE <> 'WA' and SHIP_COUNTRY = '') and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.BIP_Terminal,v.Local.sSql)
+'V.Local.sSql.Set("UPDATE CUSTOMER_MASTER SET CUSTOMER_MASTER.NORMAL_GL_ACCOUNT = '5200.101' FROM CUSTOMER_MASTER ")
+'F.Intrinsic.String.Build("{0} JOIN V_CUSTOMER_SHIPTO ON  CUSTOMER_MASTER.CUSTOMER = V_CUSTOMER_SHIPTO.CUSTOMER ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} WHERE CUSTOMER_MASTER.REC ='1' AND V_CUSTOMER_SHIPTO.COUNTRY_SHIP = 'USA' AND V_CUSTOMER_SHIPTO.STATE_SHIP <> 'WA' AND V_CUSTOMER_SHIPTO.REC ='3'", V.Local.sSql, V.Local.sSql)
+
+F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+
+'5210.101 -Main Ship to Country = CAN
+f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5210.101' where invoice in(select distinct INVOICE_NO from v_PRT_LASER_INVOICE where TERMINAL_NO = '{0}' and SHIP_COUNTRY = 'CAN') and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.BIP_Terminal,v.Local.sSql)
+'V.Local.sSql.Set("UPDATE CUSTOMER_MASTER SET CUSTOMER_MASTER.NORMAL_GL_ACCOUNT = '5210.101' FROM CUSTOMER_MASTER ")
+'F.Intrinsic.String.Build("{0} JOIN V_CUSTOMER_SHIPTO ON CUSTOMER_MASTER.CUSTOMER = V_CUSTOMER_SHIPTO.CUSTOMER ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} WHERE CUSTOMER_MASTER.REC = '1' and V_CUSTOMER_SHIPTO.COUNTRY_SHIP = 'CAN' AND V_CUSTOMER_SHIPTO.REC ='3'", V.Local.sSql, V.Local.sSql)
+
+F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+
+'5220.101 -Main Ship TO Country <> CAN 
+'THIS wasnt in the SQL but we need to put in where it's not equal to USA either. Otherwise all those we did for 5200.101 will just be blown away on this one. So they mustve missed it.
+f.Intrinsic.String.Build("UPDATE SHIPMENT_LINES SET GL_ACCOUNT = '5220.101' where invoice in(select  distinct INVOICE_NO from v_PRT_LASER_INVOICE where TERMINAL_NO = '{0}' and SHIP_COUNTRY <> 'CAN' and SHIP_COUNTRY <> 'USA' and SHIP_COUNTRY <> '') and RECORD_TYPE = 'L' and LN_SHP_STAT = '3' and RTRIM(part) <> 'FREIGHT' and RTRIM(part) <> 'Miscellaneous'",v.Passed.BIP_Terminal,v.Local.sSql)
+'V.Local.sSql.Set("Update CUSTOMER_MASTER SET CUSTOMER_MASTER.NORMAL_GL_ACCOUNT ='5220.101' FROM CUSTOMER_MASTER ")
+'F.Intrinsic.String.Build("{0} JOIN V_CUSTOMER_SHIPTO ON CUSTOMER_MASTER.CUSTOMER = V_CUSTOMER_SHIPTO.CUSTOMER ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} WHERE V_CUSTOMER_SHIPTO.COUNTRY_SHIP <> 'CAN' AND V_CUSTOMER_SHIPTO.COUNTRY_SHIP <> 'USA' ", V.Local.sSql, V.Local.sSql)
+'F.Intrinsic.String.Build("{0} AND CUSTOMER_MASTER.REC ='1' AND V_CUSTOMER_SHIPTO.REC ='3' ", V.Local.sSql, V.Local.sSql)
+
+F.ODBC.Connection!conx.Execute(V.Local.sSql)
+
+'F.Intrinsic.UI.Msgbox("Mass General Ledger settings for default Normal GL accounts setup complete.", "Process complete")
+
+F.Intrinsic.Control.CallSub(unload)
+
+
+Program.Sub.UpdateOnBatch.End
+
+Program.Sub.Comments.Start
+${$0$}$Update Customer/multi Ship Default GL sales account$}$Sisco$}$2/1/2017 8:15:00 AM$}$True
+${$3$}$0$}$$}$0$}$-1$}$$}$12:00:00 AM$}$This custom GAB script will update the customer's normal GL account based on specified criteria. The program will be ran from a custom menu item. 
+Program.Sub.Comments.End
